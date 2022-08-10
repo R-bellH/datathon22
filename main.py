@@ -65,27 +65,27 @@ def btselem_to_df():
     # read text from txt file
     with open('btselem.txt', encoding='utf-8') as txt:
         text = txt.read()
-    lines = text.split('\n')
-    lines = [line.split('\t') for line in lines]
-    lines = [line for line in lines if line != [''] and line != ['', '']]
-    # make dictionary with hebrew month names as keys and numbers as values
-    months = {'ינואר': '01', 'פברואר': '02', 'מרץ': '03', 'אפריל': '04', 'מאי': '05', 'יוני': '06', 'יולי': '07',
-              'אוגוסט': '08', 'ספטמבר': '09', 'אוקטובר': '10', 'נובמבר': '11', 'דצמבר': '12'}
-    data = {}
-    for line in lines:
-        if 'שנת' in line[0]:
-            year = line[0].split(' ')[1]
-        if line[0].isdigit():
-            value = int(line[0])
-        elif line[0] in ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר',
-                         'נובמבר', 'דצמבר']:
-            month = months[line[0]]
-            data[year + '-' + month] = value
-    df = pd.DataFrame.from_dict(data, orient='index', columns=['days_of_arrest'])
-    df.index.name = 'date'
-    df.reset_index(inplace=True)
-    df = df[['days_of_arrest', 'date']]
-    return pd.DataFrame(df)
+        lines = text.split('\n')
+        lines = [line.split('\t') for line in lines]
+        lines = [line for line in lines if line != [''] and line != ['', '']]
+        # make dictionary with hebrew month names as keys and numbers as values
+        months = {'ינואר': '01', 'פברואר': '02', 'מרץ': '03', 'אפריל': '04', 'מאי': '05', 'יוני': '06', 'יולי': '07',
+                  'אוגוסט': '08', 'ספטמבר': '09', 'אוקטובר': '10', 'נובמבר': '11', 'דצמבר': '12'}
+        data = {}
+        for line in lines:
+            if 'שנת' in line[0]:
+                year = line[0].split(' ')[1]
+            if line[0].isdigit():
+                value = int(line[0])
+            elif line[0] in ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר',
+                             'נובמבר', 'דצמבר']:
+                month = months[line[0]]
+                data[year + '-' + month] = value
+        df = pd.DataFrame.from_dict(data, orient='index', columns=['days_of_arrest'])
+        df.index.name = 'date'
+        df.reset_index(inplace=True)
+        df = df[['days_of_arrest', 'date']]
+        return pd.DataFrame(df)
 
 
 def months_to_weeks(df, year_weeks_df, features, aggregation_methods):
@@ -142,7 +142,6 @@ def add_features_from_json(df, json_file_path):
 
 
 def clean_prices(prices):
-    prices = pd.DataFrame(prices)
     weeks = prices['תאריך'].unique().tolist()
     vegs = prices['שם ירק'].unique().tolist()
     new_df = pd.DataFrame(columns=vegs + ['date'])
@@ -155,9 +154,29 @@ def clean_prices(prices):
                 prices_dict_today[veg] = np.nan
         prices_dict_today['date'] = week
         new_df.loc[len(new_df)] = prices_dict_today
+    for feat in new_df.columns.tolist()[:-1]:
+        new_df[feat] = new_df[feat].fillna(new_df[feat].mean())
     return new_df
 
-def plot_data(df, param_food='חסה', param_district='all', year_range=['2010', '2020']):
+def clean_export(export):
+    dates=export['date'].unique().tolist()
+    vegs=export['product_code'].unique().tolist()
+    vegs= [f'{veg}_export' for veg in vegs]
+    new_df=pd.DataFrame(columns=vegs+['date'])
+    for date in dates:
+        export_dict_today = {}
+        for veg in vegs:
+            try:
+                export_dict_today[veg] = export[(export['date'] == date) & (export['product_code'] == veg.split('_')[0])]['sum'].values[0]
+            except:
+                export_dict_today[veg] = np.nan
+        export_dict_today['date'] = date
+        new_df.loc[len(new_df)] = export_dict_today
+    for feat in new_df.columns.tolist()[:-1]:
+        new_df[feat] = new_df[feat].fillna(new_df[feat].mean())
+    return new_df
+
+def plot_data(df, param_food='all', param_district='all', year_range=['2010', '2020']):
     # filter dataframe by year range
     df = df[(df['year'] >= year_range[0]) & (df['year'] <= year_range[1])]
     df = df.assign(date=lambda x: x['date'].str[:7])
@@ -197,21 +216,48 @@ if __name__ == '__main__':
     data = data.assign(year=lambda x: x['date'].str[:4])
     data = data.assign(month=lambda x: x['date'].str[5:7])
 
+    # plot_data(data, param_food='חסה', param_district='מחוז הדרום', year_range=['2010', '2012'])
+
     # Importing additional datasets
     btselem = btselem_to_df()
     btselem = btselem[btselem['date'] >= '2009-12']
     btselem = btselem[btselem['date'] <= '2020-12']
     btselem = months_to_weeks(btselem, years_weeks_df, ['days_of_arrest'], ['sum'])
     btselem.rename(columns={'date': 'year_weeks'}, inplace=True)
+    # btselemplot = btselem_to_df()
+    # btselemplot = btselemplot[btselemplot['date'] >= '2009-12']
+    # btselemplot = btselemplot[btselemplot['date'] <= '2012-12']
+    # plt.figure(figsize=(20, 6))
+    # plt.plot(btselemplot['date'], btselemplot['days_of_arrest'])
+    # plt.title('Days of arrest')
+    # plt.show()
+
+    # add btselem to dataframe
     data = pd.merge(data, btselem, on='year_weeks', how='left')
     df = data
+
+    # # add meteorology data to the dataframe
     # for json_path in ['HaZafon.json', 'telaviv.json', 'jerusalem-west-bank.json']:
     #     df = add_features_from_json(df, json_path)
 
+    # add prices to the dataframe
     prices = pd.read_excel('prices_after_dates.xlsx', index_col=0)
     prices = clean_prices(prices)
     df = pd.merge(df, prices, on='date', how='left')
 
+
+    # add export data to the dataframe
+    export = pd.read_csv('export.csv')
+    export = clean_export(export)
+    feats= export.columns.tolist()
+    export = months_to_weeks(export, years_weeks_df, feats[:-1], ['sum' for i in range(len(feats) - 1)])
+    export.rename(columns={'date': 'year_weeks'}, inplace=True)
+    df = pd.merge(df, export, on='year_weeks', how='left')
+    df = df.drop(['year_weeks'], axis=1)
+    # fillna
+    for feat in df.columns.tolist()[:-1]:
+        df[feat] = df[feat].fillna(df[feat].mean())
+    print(df.head())
 
 
 
